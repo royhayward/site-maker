@@ -1,146 +1,168 @@
     console.log('Server starting...');
 
-import express from 'express';
+import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import webpack from 'webpack';
 import webpackDevMiddleware from 'webpack-dev-middleware';
+import webpackHotMiddleware from 'webpack-hot-middleware';
+import multer, { FileFilterCallback } from 'multer';
 import webpackConfig from '../webpack.config';
 
+// Types
+interface MulterRequest extends Request {
+  file?: Express.Multer.File;
+}
+
+// Constants
+const PORT = process.env.PORT || 3000;
+// Express app setup
 const app = express();
-const compiler = webpack(webpackConfig as webpack.Configuration);
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// Webpack setup for development
+if (isDevelopment) {
+  const compiler = webpack(webpackConfig);
+  app.use(
+    webpackDevMiddleware(compiler, {
+      publicPath: webpackConfig.output?.publicPath || '/',
+    })
+  );
+  app.use(webpackHotMiddleware(compiler));
+}
 
 // Middleware
 app.use(express.json());
-
-// Development middleware
-if (process.env.NODE_ENV === 'development') {
-  app.use(
-    webpackDevMiddleware(compiler, {
-      publicPath: '/',
-    })
-  );
-}
-
-// Serve static files
 app.use(express.static(path.join(__dirname, '../public')));
 
-// API endpoints
-app.get('/api/projects', (req, res) => {
+// Configure multer for image uploads
+const storage = multer.diskStorage({
+  destination: (
+    req: Request,
+    _file: Express.Multer.File,
+    cb: (error: Error | null, destination: string) => void
+  ) => {
+    // Default to a common images directory since we don't have project context here
+    const imagePath = path.join(__dirname, '../projects/images');
+    
+    // Ensure directory exists
+    if (!fs.existsSync(imagePath)) {
+      fs.mkdirSync(imagePath, { recursive: true });
+    }
+    cb(null, imagePath);
+  },
+  filename: (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (error: Error | null, filename: string) => void
+  ) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (
+    _req: Request,
+    file: Express.Multer.File,
+    cb: FileFilterCallback
+  ) => {
+    if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  }
+});
+
+interface ApiResponse<T = unknown> {
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Image upload route handler type
+type UploadHandler = (req: MulterRequest, res: Response) => void;
+
+// Image upload route
+const handleImageUpload: UploadHandler = (req, res) => {
+  if (!req.file) {
+    const response: ApiResponse = { error: 'No image file provided or invalid file type' };
+    return res.status(400).json(response);
+  }
+
+  const response: ApiResponse<{ filename: string; path: string }> = {
+    message: 'Image uploaded successfully',
+    data: {
+      filename: req.file.filename,
+      path: req.file.path
+    }
+  };
+  res.json(response);
+};
+
+app.post('/api/images/upload', upload.single('image'), handleImageUpload);
+
+// Get images route
+app.get('/api/images', (_req: Request, res: Response) => {
   const projectsPath = path.join(__dirname, '../projects');
-  
+  const images: Array<{ name: string; url: string }> = [];
+
   try {
-    if (!fs.existsSync(projectsPath)) {
-      fs.mkdirSync(projectsPath);
+    if (fs.existsSync(projectsPath)) {
+      const imagesPath = path.join(projectsPath, 'images');
+      if (fs.existsSync(imagesPath)) {
+        const imageFiles = fs.readdirSync(imagesPath)
+          .filter(file => /\.(jpg|jpeg|png)$/i.test(file))
+          .map(file => ({
+            name: file,
+            url: `/projects/images/${file}`
+          }));
+        images.push(...imageFiles);
+      }
     }
-    
-    const projects = fs.readdirSync(projectsPath)
-      .filter(file => fs.statSync(path.join(projectsPath, file)).isDirectory());
-    
-    res.json({ projects });
+    const response: ApiResponse<Array<{ name: string; url: string }>> = { 
+      data: images.sort((a, b) => a.name.localeCompare(b.name)) 
+    };
+    res.json(response);
   } catch (error) {
-    console.error('Error reading projects:', error);
-    res.status(500).json({ error: 'Failed to read projects' });
+    const response: ApiResponse = { error: 'Failed to fetch images' };
+    res.status(500).json(response);
   }
 });
 
-app.post('/api/projects', (req, res) => {
-  const { projectName } = req.body;
-  
-  if (!projectName) {
-    return res.status(400).json({ error: 'Project name is required' });
+// Delete image route
+app.delete('/api/images/:imageName', (req: Request, res: Response) => {
+  const { imageName } = req.params;
+  if (!imageName) {
+    const response: ApiResponse = { error: 'Image name is required' };
+    return res.status(400).json(response);
   }
 
-  const projectPath = path.join(__dirname, '../projects', projectName);
-  
+  const imagePath = path.join(__dirname, '../projects/images', imageName);
+
   try {
-    if (!fs.existsSync(projectPath)) {
-      fs.mkdirSync(projectPath);
-      // Create subdirectories
-      fs.mkdirSync(path.join(projectPath, 'images'));
-      fs.mkdirSync(path.join(projectPath, 'styles'));
-      fs.mkdirSync(path.join(projectPath, 'js'));
-      fs.mkdirSync(path.join(projectPath, 'content'));
-    }
-    
-    res.json({ message: 'Project created successfully', projectName });
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+        const response: ApiResponse = { message: 'Image deleted successfully' };
+        return res.json(response);
+      }
+    const response: ApiResponse = { error: 'Image not found' };
+    res.status(404).json(response);
   } catch (error) {
-    console.error('Error creating project:', error);
-    res.status(500).json({ error: 'Failed to create project' });
+    const response: ApiResponse = { error: 'Failed to delete image' };
+    res.status(500).json(response);
   }
 });
 
-app.get('/api/projects/:projectName/content', (req, res) => {
-  const { projectName } = req.params;
-  const contentPath = path.join(__dirname, '../projects', projectName, 'content');
-  
-  try {
-    if (!fs.existsSync(contentPath)) {
-      fs.mkdirSync(contentPath, { recursive: true });
-      return res.json({ files: [] });
-    }
-    
-    const files = fs.readdirSync(contentPath)
-      .filter(file => file.endsWith('.md'));
-    
-    res.json({ files });
-  } catch (error) {
-    console.error('Error reading content files:', error);
-    res.status(500).json({ error: 'Failed to read content files' });
-  }
-});
-
-app.get('/api/projects/:projectName/content/:fileName', (req, res) => {
-  const { projectName, fileName } = req.params;
-  const filePath = path.join(__dirname, '../projects', projectName, 'content', 
-    fileName.endsWith('.md') ? fileName : `${fileName}.md`
-  );
-  
-  try {
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    
-    const content = fs.readFileSync(filePath, 'utf8');
-    res.json({ content });
-  } catch (error) {
-    console.error('Error reading file:', error);
-    res.status(500).json({ error: 'Failed to read file' });
-  }
-});
-
-app.post('/api/projects/:projectName/content', (req, res) => {
-  const { projectName } = req.params;
-  const { fileName, content } = req.body;
-  
-  if (!fileName || content === undefined) {
-    return res.status(400).json({ error: 'File name and content are required' });
-  }
-
-  const contentPath = path.join(__dirname, '../projects', projectName, 'content');
-  const filePath = path.join(contentPath, `${fileName}.md`);
-  
-  try {
-    if (!fs.existsSync(contentPath)) {
-      fs.mkdirSync(contentPath, { recursive: true });
-    }
-    
-    fs.writeFileSync(filePath, content);
-    res.json({ message: 'File saved successfully', fileName });
-  } catch (error) {
-    console.error('Error saving file:', error);
-    res.status(500).json({ error: 'Failed to save file' });
-  }
-});
-
-// Serve index.html for all other routes
-app.get('*', (req, res) => {
+// Handle client-side routing - this should be the last route
+app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-const PORT = process.env.PORT || 3000;
-
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
-      console.log('Press CTRL-C to stop');
-    });
+  console.log('Press CTRL-C to stop');
+});

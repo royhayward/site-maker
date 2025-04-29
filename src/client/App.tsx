@@ -1,18 +1,25 @@
 import React from 'react';
-import MarkdownEditor from './components/MarkdownEditor';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { NavBar } from './components/NavBar';
+import { Editor } from './components/Editor';
+import { ImageRepo } from './components/ImageRepo';
+import { Settings } from './components/Settings';
 
-const App = () => {
+export const App: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-900">
-      <header className="bg-gray-800 border-b border-gray-700 mb-4">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-3xl font-bold py-4 text-white">Static Site Builder</h1>
-        </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-4">
-        <MarkdownEditor />
-      </main>
-    </div>
+    <Router>
+      <div className="min-h-screen bg-slate-50">
+        <NavBar />
+        <main className="container mx-auto p-4 mt-6">
+          <Routes>
+            <Route path="/" element={<Navigate to="/editor" replace />} />
+            <Route path="/editor" element={<Editor />} />
+            <Route path="/images" element={<ImageRepo />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 };
 
