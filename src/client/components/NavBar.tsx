@@ -1,82 +1,56 @@
 import React from 'react';
+import { cn } from '../utils/cn';
 
-export interface NavBarProps {
-  selectedProject: string;
-  onProjectSelect: (projectName: string) => void;
-  onFileSelect: (fileName: string) => void;
-}
+type NavButton = {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+};
 
-const NavBar: React.FC<NavBarProps> = ({
-  selectedProject,
-  onProjectSelect,
-  onFileSelect
-}) => {
+const NavButton: React.FC<NavButton> = ({ label, isActive, onClick }) => {
   return (
-    <nav className="bg-gray-800 text-white p-4">
-      <div className="max-w-screen-2xl mx-auto px-4">
-        {/* Brand and Logo */}
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="bg-primary w-8 h-8 rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold">S</span>
-            </div>
-            <span className="text-lg font-semibold">SiteMaker</span>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex -mb-px">
-          <button
-            onClick={() => onProjectSelect('editor')}
-            className={`
-              relative px-6 py-3 text-sm font-medium
-              border-b-2 transition-all duration-200
-              ${selectedProject === 'editor' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}
-              before:content-['']
-              before:absolute before:bottom-0 before:left-0 before:w-full before:h-0.5
-              ${selectedProject === 'editor' ? 'before:bg-primary' : 'before:bg-transparent hover:before:bg-muted'}
-            `}
-          >
-            Editor
-            </button>
-          
-          <button
-            onClick={() => onProjectSelect('images')}
-            className={`
-              relative px-6 py-3 text-sm font-medium
-              border-b-2 transition-all duration-200
-              ${selectedProject === 'images' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}
-              before:content-['']
-              before:absolute before:bottom-0 before:left-0 before:w-full before:h-0.5
-              ${selectedProject === 'images' ? 'before:bg-primary' : 'before:bg-transparent hover:before:bg-muted'}
-            `}
-              >
-            Images
-            </button>
-          
-          <button
-            onClick={() => onProjectSelect('settings')}
-            className={`
-              relative px-6 py-3 text-sm font-medium
-              border-b-2 transition-all duration-200
-              ${selectedProject === 'settings' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'}
-              before:content-['']
-              before:absolute before:bottom-0 before:left-0 before:w-full before:h-0.5
-              ${selectedProject === 'settings' ? 'before:bg-primary' : 'before:bg-transparent hover:before:bg-muted'}
-            `}
-          >
-            Settings
-          </button>
-      </div>
-      </div>
-    </nav>
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2 rounded-lg transition-all duration-200 font-medium",
+        "hover:bg-slate-100 hover:scale-105 active:scale-95",
+        isActive ? "bg-slate-100 text-slate-900" : "text-slate-600"
+      )}
+    >
+      {label}
+    </button>
   );
 };
 
-export default NavBar;
+export const NavBar: React.FC = () => {
+  const [activeTab, setActiveTab] = React.useState('editor');
+
+  const tabs = [
+    { id: 'editor', label: 'Editor' },
+    { id: 'images', label: 'Images' },
+    { id: 'settings', label: 'Settings' },
+  ];
+
+  return (
+    <div className="w-full bg-white shadow-sm border-b">
+      {/* Title Section */}
+      <div className="w-full bg-slate-800 py-4">
+        <div className="max-w-screen-xl mx-auto px-4">
+          <h1 className="text-2xl font-bold text-white">Site Maker</h1>
+        </div>
+      </div>
+      
+      {/* Navigation Section */}
+      <div className="max-w-screen-xl mx-auto px-4 h-16 flex items-center gap-2">
+        {tabs.map((tab) => (
+          <NavButton
+            key={tab.id}
+            label={tab.label}
+            isActive={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
